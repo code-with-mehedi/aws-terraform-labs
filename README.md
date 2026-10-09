@@ -1,62 +1,94 @@
 # AWS Terraform Labs
 
-Hands-on, progressive labs for learning **AWS infrastructure as code with Terraform** — from a basic VPC to a full production-grade, multi-tier, containerized platform.
+Production-grade, **module-based** AWS infrastructure as code with Terraform — a multi-tier architecture with per-environment configurations.
+
+## Architecture
+
+```
+aws-terraform-labs/
+├── versions.tf                    # Terraform + provider version pins
+├── providers.tf                   # AWS provider, default tags
+├── backend.tf                     # S3 remote state
+├── variables.tf                   # Root-level variables
+├── main.tf                        # Orchestrator — calls all modules
+├── outputs.tf                     # Infrastructure endpoints
+│
+├── modules/                       # Reusable, self-contained modules
+│   ├── vpc/                       # VPC, subnets, NAT, route tables
+│   ├── security-groups/           # ALB, web, app, DB, bastion SGs
+│   ├── ec2/                       # Instances, AMI, key pairs, EBS
+│   ├── alb/                       # Load balancer, target groups, listeners
+│   ├── auto-scaling/              # Launch template, ASG, scaling policies
+│   ├── rds/                       # RDS, subnet groups, parameter groups
+│   ├── s3/                        # Buckets, encryption, lifecycle
+│   ├── iam/                       # Roles, policies, instance profiles
+│   ├── route53/                   # Hosted zones, records, health checks
+│   ├── cloudfront/                # Distributions, origins, cache policies
+│   ├── cloudwatch/                # Logs, alarms, dashboards
+│   ├── ecs/                       # Cluster, task definitions, services
+│   ├── ecr/                       # Container registry, lifecycle
+│   ├── eks/                       # EKS cluster, node groups
+│   ├── lambda/                    # Functions, API Gateway trigger
+│   ├── api-gateway/               # REST/HTTP APIs, routes, stages
+│   ├── sqs/                       # Message queues
+│   ├── sns/                       # Topics, subscriptions, alerting
+│   ├── eventbridge/               # Event buses, rules, targets
+│   ├── elasticache/               # Redis cluster
+│   ├── secrets/                   # Secrets Manager, KMS
+│   └── tfstate-backend/           # S3 state bucket (bootstrap)
+│
+└── environments/                  # Per-environment variable overrides
+    ├── dev/terraform.tfvars       # 2 AZs, t3.micro, cost-optimized
+    ├── stg/terraform.tfvars       # 3 AZs, t3.small, mirrors prod
+    └── prod/terraform.tfvars      # 3 AZs, t3.medium, HA-ready
+```
 
 ## Prerequisites
 
 - [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.5
 - [AWS CLI](https://aws.amazon.com/cli/) configured (`aws configure`)
-- An AWS account (⚠️ some labs create billable resources — always `terraform destroy` when done)
-
-## Lab Roadmap
-
-| #  | Lab | Topics |
-|----|-----|--------|
-| 00 | [bootstrap](00-bootstrap) | Provider, remote backend (S3 + DynamoDB), versions |
-| 01 | [vpc-basics](01-vpc-basics) | VPC, subnets, route tables, internet gateway |
-| 02 | [vpc-production](02-vpc-production) | Public/private/isolated subnets, NAT gateway, NACLs |
-| 03 | [security-groups](03-security-groups) | ALB, web, app, DB & bastion SGs |
-| 04 | [ec2](04-ec2) | AMI lookup, key pair, EBS, Elastic IP, user data |
-| 05 | [ec2-web-server](05-ec2-web-server) | Nginx web server on EC2 |
-| 06 | [alb](06-alb) | Application Load Balancer, target groups, listeners |
-| 07 | [multi-tier](07-multi-tier) | Modular network / LB / web / app / DB tiers |
-| 08 | [auto-scaling](08-auto-scaling) | Launch templates, ASG, scaling policies |
-| 09 | [rds](09-rds) | RDS, subnet & parameter groups |
-| 10 | [s3](10-s3) | Buckets, encryption, versioning, lifecycle, policies |
-| 11 | [iam](11-iam) | Users, roles, policies, instance profiles |
-| 12 | [route53](12-route53) | Hosted zones, records, health checks |
-| 13 | [cloudfront](13-cloudfront) | Distributions, origins, cache policies |
-| 14 | [cloudwatch](14-cloudwatch) | Logs, alarms, dashboards |
-| 15 | [ecs](15-ecs) | ECS on EC2: cluster, tasks, services, autoscaling |
-| 16 | [ecs-fargate](16-ecs-fargate) | Serverless containers with Fargate |
-| 17 | [ecr](17-ecr) | Container registry, lifecycle, permissions |
-| 18 | [eks](18-eks) | EKS cluster, node groups, IAM |
-| 19 | [eks-production](19-eks-production) | ALB controller, autoscaling, monitoring |
-| 20 | [lambda](20-lambda) | Lambda functions, IAM, API Gateway trigger |
-| 21 | [api-gateway](21-api-gateway) | APIs, routes, stages, authorizers |
-| 22 | [sqs-sns](22-sqs-sns) | Queues, topics, subscriptions, Lambda consumer |
-| 23 | [eventbridge](23-eventbridge) | Event buses, rules, targets |
-| 24 | [elasticache](24-elasticache) | Redis cluster |
-| 25 | [secrets](25-secrets) | Secrets Manager, KMS |
-| 26 | [monitoring](26-monitoring) | CloudWatch + SNS alerting |
-| 27 | [high-availability](27-high-availability) | Multi-AZ ASG, ALB, RDS |
-| 28 | [disaster-recovery](28-disaster-recovery) | AWS Backup, S3 replication, RDS backups |
-| 29 | [final-project](29-final-project) | End-to-end production platform |
+- An AWS account (⚠️ always `terraform destroy` when done to avoid charges)
 
 ## Usage
 
 ```bash
-cd 01-vpc-basics
+# Initialize
 terraform init
-terraform fmt && terraform validate
-terraform plan
-terraform apply
-terraform destroy   # clean up to avoid charges
+
+# Deploy to dev
+terraform plan  -var-file="environments/dev/terraform.tfvars"
+terraform apply -var-file="environments/dev/terraform.tfvars"
+
+# Deploy to staging
+terraform apply -var-file="environments/stg/terraform.tfvars"
+
+# Deploy to production
+terraform apply -var-file="environments/prod/terraform.tfvars"
+
+# Destroy
+terraform destroy -var-file="environments/dev/terraform.tfvars"
 ```
 
-## Repository Structure
+## Module Pattern
 
-Each numbered folder is a self-contained lab. Labs build on concepts from previous ones, so work through them in order.
+Every module under `modules/` follows the same structure:
+
+```
+modules/<service>/
+├── main.tf          # Resource definitions
+├── variables.tf     # Input variables
+└── outputs.tf       # Output values
+```
+
+Modules are called from the root `main.tf` and wired together through input/output dependencies.
+
+## Environment Strategy
+
+| Environment | VPC CIDR | AZs | Instance Size | Purpose |
+|---|---|---|---|---|
+| **dev** | `10.0.0.0/16` | 2 | `t3.micro` | Development & testing |
+| **stg** | `10.1.0.0/16` | 3 | `t3.small` | Pre-production validation |
+| **prod** | `10.2.0.0/16` | 3 | `t3.medium` | Production workloads |
 
 ## License
 
